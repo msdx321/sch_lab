@@ -1,5 +1,5 @@
 /************************************************************************
- * NASA Docket No. GSC-18,719-1, and identified as “core Flight System: Bootes”
+ * NASA Docket No. GSC-18,719-1, and identified as "core Flight System: Bootes"
  *
  * Copyright (c) 2020 United States Government as represented by the
  * Administrator of the National Aeronautics and Space Administration.
@@ -61,23 +61,30 @@ typedef struct
 */
 SCH_LAB_GlobalData_t SCH_LAB_Global;
 
+/* 
+** Dummy Task Function Prototypes 
+*/
+void SCH_LAB_DummyTask1(void);
+void SCH_LAB_DummyTask2(void);
+void SCH_LAB_DummyTask3(void);
+void SCH_LAB_DummyTask4(void);
+void SCH_LAB_DummyTask5(void);
+
 /*
 ** Local Function Prototypes
 */
 CFE_Status_t SCH_LAB_AppInit(void);
+void SCH_LAB_ProcessPacket(CFE_SB_Buffer_t *SBBufPtr);
 
 /*
 ** AppMain
 */
 void SCH_LAB_AppMain(void)
 {
-    int                   i;
-    uint32                SCH_OneHzPktsRcvd = 0;
-    int32                 OsStatus;
-    CFE_Status_t          Status;
     uint32                RunStatus = CFE_ES_RunStatus_APP_RUN;
-    SCH_LAB_StateEntry_t *LocalStateEntry;
-    CFE_SB_Buffer_t *     SBBufPtr;
+    CFE_Status_t          Status;
+    uint32                TaskCounter = 0;
+    CFE_SB_Buffer_t      *SBBufPtr;
 
     CFE_ES_PerfLogEntry(SCH_LAB_MAIN_TASK_PERF_ID);
 
@@ -93,50 +100,162 @@ void SCH_LAB_AppMain(void)
     {
         CFE_ES_PerfLogExit(SCH_LAB_MAIN_TASK_PERF_ID);
 
-        /* Pend on timing sem */
-        OsStatus = OS_CountSemTake(SCH_LAB_Global.TimingSem);
-        if (OsStatus == OS_SUCCESS)
-        {
-            /* check for arrival of the 1Hz - this should sync counts (TBD) */
-            Status = CFE_SB_ReceiveBuffer(&SBBufPtr, SCH_LAB_Global.CmdPipe, CFE_SB_POLL);
-        }
-        else
-        {
-            Status = CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
-        }
-
+        /* Wait for packet on command pipe */
+        Status = CFE_SB_ReceiveBuffer(&SBBufPtr, SCH_LAB_Global.CmdPipe, CFE_SB_PEND_FOREVER);
+        
         CFE_ES_PerfLogEntry(SCH_LAB_MAIN_TASK_PERF_ID);
 
         if (Status == CFE_SUCCESS)
         {
-            SCH_OneHzPktsRcvd++;
+            /* Process the received packet */
+            SCH_LAB_ProcessPacket(SBBufPtr);
+            
+            /* Increment task counter */
+            TaskCounter++;
+            CFE_ES_WriteToSysLog("SCH_LAB: Completed cycle %u\n", (unsigned int)TaskCounter);
         }
-
-        if (OsStatus == OS_SUCCESS && SCH_OneHzPktsRcvd > 0)
+        else
         {
-            /*
-            ** Process table every tick, sending packets that are ready
-            */
-            LocalStateEntry = SCH_LAB_Global.State;
-
-            for (i = 0; i < SCH_LAB_MAX_SCHEDULE_ENTRIES; i++)
-            {
-                if (LocalStateEntry->PacketRate != 0)
-                {
-                    ++LocalStateEntry->Counter;
-                    if (LocalStateEntry->Counter >= LocalStateEntry->PacketRate)
-                    {
-                        LocalStateEntry->Counter = 0;
-                        CFE_SB_TransmitMsg(CFE_MSG_PTR(LocalStateEntry->CommandHeader), true);
-                    }
-                }
-                ++LocalStateEntry;
-            }
+            CFE_ES_WriteToSysLog("SCH_LAB: Error receiving packet: 0x%08lX\n", (unsigned long)Status);
         }
-
-    } /* end while */
+    }
 
     CFE_ES_ExitApp(RunStatus);
+}
+
+/*
+** Process received packet and execute the appropriate task
+*/
+void SCH_LAB_ProcessPacket(CFE_SB_Buffer_t *SBBufPtr)
+{
+    CFE_SB_MsgId_t MsgId;
+    uint8_t TaskId = 0;
+    
+    /* Get message ID and function code */
+    CFE_MSG_GetMsgId(&SBBufPtr->Msg, &MsgId);
+    
+    CFE_ES_WriteToSysLog("SCH_LAB: Received MsgId: 0x%04X\n", 
+                         (unsigned int)CFE_SB_MsgIdToValue(MsgId));
+    
+        /* Get the task ID from the first byte of the payload */
+    uint8_t *payload = (uint8_t *)SBBufPtr + 8; /* Skip the 8-byte header */
+    TaskId = payload[0];
+        
+        /* Use the task ID from the payload */
+    switch (TaskId)
+    {
+        case 1:
+            SCH_LAB_DummyTask1();
+            break;
+             
+        case 2:
+            SCH_LAB_DummyTask2();
+            break;
+              
+        case 3:
+            SCH_LAB_DummyTask3();
+            break;
+               
+        case 4:
+            SCH_LAB_DummyTask4();
+            break;
+                
+        case 5:
+            SCH_LAB_DummyTask5();
+            break;
+                
+        default:
+            CFE_ES_WriteToSysLog("SCH_LAB: Unknown task ID from payload: %d\n", TaskId);
+        break;
+    }
+}
+
+/* 
+** Dummy Task Implementations 
+*/
+void SCH_LAB_DummyTask1(void)
+{
+    OS_time_t start_time;
+    OS_time_t current_time;
+    OS_time_t elapsed_time;
+    OS_time_t wait_time = OS_TimeFromTotalMilliseconds(50); /* 50ms */
+    
+    OS_GetLocalTime(&start_time);
+    
+    /* Busy wait loop */
+    do
+    {
+        OS_GetLocalTime(&current_time);
+        elapsed_time = OS_TimeSubtract(current_time, start_time);
+    } while (OS_TimeCompare(elapsed_time, wait_time) < 0);
+}
+
+void SCH_LAB_DummyTask2(void)
+{
+    OS_time_t start_time;
+    OS_time_t current_time;
+    OS_time_t elapsed_time;
+    OS_time_t wait_time = OS_TimeFromTotalMilliseconds(75); /* 75ms */
+    
+    OS_GetLocalTime(&start_time);
+    
+    /* Busy wait loop */
+    do
+    {
+        OS_GetLocalTime(&current_time);
+        elapsed_time = OS_TimeSubtract(current_time, start_time);
+    } while (OS_TimeCompare(elapsed_time, wait_time) < 0);
+}
+
+void SCH_LAB_DummyTask3(void)
+{
+    OS_time_t start_time;
+    OS_time_t current_time;
+    OS_time_t elapsed_time;
+    OS_time_t wait_time = OS_TimeFromTotalMilliseconds(125); /* 125ms */
+    
+    OS_GetLocalTime(&start_time);
+    
+    /* Busy wait loop */
+    do
+    {
+        OS_GetLocalTime(&current_time);
+        elapsed_time = OS_TimeSubtract(current_time, start_time);
+    } while (OS_TimeCompare(elapsed_time, wait_time) < 0);
+}
+
+void SCH_LAB_DummyTask4(void)
+{
+    OS_time_t start_time;
+    OS_time_t current_time;
+    OS_time_t elapsed_time;
+    OS_time_t wait_time = OS_TimeFromTotalMilliseconds(100); /* 100ms */
+    
+    OS_GetLocalTime(&start_time);
+    
+    /* Busy wait loop */
+    do
+    {
+        OS_GetLocalTime(&current_time);
+        elapsed_time = OS_TimeSubtract(current_time, start_time);
+    } while (OS_TimeCompare(elapsed_time, wait_time) < 0);
+}
+
+void SCH_LAB_DummyTask5(void)
+{
+    OS_time_t start_time;
+    OS_time_t current_time;
+    OS_time_t elapsed_time;
+    OS_time_t wait_time = OS_TimeFromTotalMilliseconds(150); /* 150ms */
+    
+    OS_GetLocalTime(&start_time);
+    
+    /* Busy wait loop */
+    do
+    {
+        OS_GetLocalTime(&current_time);
+        elapsed_time = OS_TimeSubtract(current_time, start_time);
+    } while (OS_TimeCompare(elapsed_time, wait_time) < 0);
 }
 
 void SCH_LAB_LocalTimerCallback(osal_id_t object_id, void *arg)
@@ -151,159 +270,59 @@ void SCH_LAB_LocalTimerCallback(osal_id_t object_id, void *arg)
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 CFE_Status_t SCH_LAB_AppInit(void)
 {
-    int                           i, x;
     CFE_Status_t                  Status;
-    int32                         OsStatus;
-    uint32                        TimerPeriod;
-    osal_id_t                     TimeBaseId = OS_OBJECT_ID_UNDEFINED;
-    SCH_LAB_ScheduleTable_t *     ConfigTable;
-    SCH_LAB_ScheduleTableEntry_t *ConfigEntry;
-    SCH_LAB_StateEntry_t *        LocalStateEntry;
-    void *                        TableAddr;
     char                          VersionString[SCH_LAB_CFG_MAX_VERSION_STR_LEN];
 
     memset(&SCH_LAB_Global, 0, sizeof(SCH_LAB_Global));
 
-    OsStatus = OS_CountSemCreate(&SCH_LAB_Global.TimingSem, "SCH_LAB", 0, 0);
-    if (OsStatus != OS_SUCCESS)
-    {
-        CFE_ES_WriteToSysLog("%s: OS_CountSemCreate failed:RC=%ld\n", __func__, (long)OsStatus);
-        return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
-    }
-
-    /* The underlying timebase object should have been created by the PSP */
-    OsStatus = OS_TimeBaseGetIdByName(&TimeBaseId, "cFS-Master");
-    if (OsStatus != OS_SUCCESS)
-    {
-        CFE_ES_WriteToSysLog("%s: OS_TimeBaseGetIdByName failed:RC=%ld\n", __func__, (long)OsStatus);
-        return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
-    }
-
-    /* Create the timer callback (but not set yet, as that requires the config table) */
-    OsStatus = OS_TimerAdd(&SCH_LAB_Global.TimerId, "SCH_LAB", TimeBaseId, SCH_LAB_LocalTimerCallback, NULL);
-    if (OsStatus != OS_SUCCESS)
-    {
-        CFE_ES_WriteToSysLog("%s: OS_TimerAdd failed:RC=%ld\n", __func__, (long)OsStatus);
-        return CFE_STATUS_EXTERNAL_RESOURCE_FAIL;
-    }
-
-    /*
-    ** Register tables with cFE and load default data
-    */
-    Status = CFE_TBL_Register(&SCH_LAB_Global.TblHandle, "ScheduleTable", sizeof(SCH_LAB_ScheduleTable_t),
-                              CFE_TBL_OPT_DEFAULT, NULL);
-
+    /* Create command pipe */
+    Status = CFE_SB_CreatePipe(&SCH_LAB_Global.CmdPipe, 16, "SCH_LAB_CMD_PIPE");
     if (Status != CFE_SUCCESS)
     {
-        CFE_ES_WriteToSysLog("SCH_LAB: Error Registering ScheduleTable, RC = 0x%08lX\n", (unsigned long)Status);
-
-        return Status;
-    }
-    else
-    {
-        /*
-        ** Loading Table
-        */
-        Status = CFE_TBL_Load(SCH_LAB_Global.TblHandle, CFE_TBL_SRC_FILE, SCH_LAB_TBL_DEFAULT_FILE);
-        if (Status != CFE_SUCCESS)
-        {
-            CFE_ES_WriteToSysLog("SCH_LAB: Error Loading Table ScheduleTable, RC = 0x%08lX\n", (unsigned long)Status);
-            CFE_TBL_ReleaseAddress(SCH_LAB_Global.TblHandle);
-
-            return Status;
-        }
-    }
-
-    /*
-    ** Get Table Address
-    */
-    Status = CFE_TBL_GetAddress(&TableAddr, SCH_LAB_Global.TblHandle);
-    if (Status != CFE_SUCCESS && Status != CFE_TBL_INFO_UPDATED)
-    {
-        CFE_ES_WriteToSysLog("SCH_LAB: Error Getting Table's Address ScheduleTable, RC = 0x%08lX\n",
-                             (unsigned long)Status);
-
+        CFE_ES_WriteToSysLog("SCH_LAB: Error creating command pipe, RC = 0x%08lX\n", (unsigned long)Status);
         return Status;
     }
 
-    /*
-    ** Initialize the command headers
-    */
-    ConfigTable     = TableAddr;
-    ConfigEntry     = ConfigTable->Config;
-    LocalStateEntry = SCH_LAB_Global.State;
-
-    /* Populate the CCSDS message and move the message content into the proper user data space. */
-    for (i = 0; i < SCH_LAB_MAX_SCHEDULE_ENTRIES; i++)
-    {
-        if (ConfigEntry->PacketRate != 0)
-        {
-            /* Initialize the message with the length of the header + payload */
-            CFE_MSG_Init(CFE_MSG_PTR(LocalStateEntry->CommandHeader), ConfigEntry->MessageID,
-                         sizeof(LocalStateEntry->CommandHeader) + ConfigEntry->PayloadLength);
-            CFE_MSG_SetFcnCode(CFE_MSG_PTR(LocalStateEntry->CommandHeader), ConfigEntry->FcnCode);
-
-            LocalStateEntry->PacketRate    = ConfigEntry->PacketRate;
-            LocalStateEntry->PayloadLength = ConfigEntry->PayloadLength;
-
-            for (x = 0; x < SCH_LAB_MAX_ARGS_PER_ENTRY; x++)
-            {
-                LocalStateEntry->MessageBuffer[x] = ConfigEntry->MessageBuffer[x];
-            }
-        }
-        ++ConfigEntry;
-        ++LocalStateEntry;
-    }
-
-    if (ConfigTable->TickRate == 0)
-    {
-        /* use default of 1 second */
-        CFE_ES_WriteToSysLog("%s: Using default tick rate of 1 second\n", __func__);
-        TimerPeriod = 1000000;
-    }
-    else
-    {
-        TimerPeriod = 1000000 / ConfigTable->TickRate;
-        if ((TimerPeriod * ConfigTable->TickRate) != 1000000)
-        {
-            CFE_ES_WriteToSysLog("%s: WARNING: tick rate of %lu is not an integer number of microseconds\n", __func__,
-                                 (unsigned long)ConfigTable->TickRate);
-        }
-    }
-
-    /*
-    ** Release the table
-    */
-    Status = CFE_TBL_ReleaseAddress(SCH_LAB_Global.TblHandle);
+    /* Subscribe to command packets */
+    Status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(0x1801), SCH_LAB_Global.CmdPipe);
     if (Status != CFE_SUCCESS)
     {
-        CFE_ES_WriteToSysLog("SCH_LAB: Error Releasing Table ScheduleTable, RC = 0x%08lX\n", (unsigned long)Status);
+        CFE_ES_WriteToSysLog("SCH_LAB: Error subscribing to command 0x1801, RC = 0x%08lX\n", (unsigned long)Status);
+        return Status;
     }
-
-    /* Create pipe and subscribe to the 1Hz pkt */
-    Status = CFE_SB_CreatePipe(&SCH_LAB_Global.CmdPipe, 8, "SCH_LAB_CMD_PIPE");
+    
+    Status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(0x1802), SCH_LAB_Global.CmdPipe);
     if (Status != CFE_SUCCESS)
     {
-        OS_printf("SCH Error creating pipe!\n");
+        CFE_ES_WriteToSysLog("SCH_LAB: Error subscribing to command 0x1802, RC = 0x%08lX\n", (unsigned long)Status);
+        return Status;
     }
-
-    Status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(CFE_TIME_ONEHZ_CMD_MID), SCH_LAB_Global.CmdPipe);
+    
+    Status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(0x1803), SCH_LAB_Global.CmdPipe);
     if (Status != CFE_SUCCESS)
     {
-        OS_printf("SCH Error subscribing to 1hz!\n");
+        CFE_ES_WriteToSysLog("SCH_LAB: Error subscribing to command 0x1803, RC = 0x%08lX\n", (unsigned long)Status);
+        return Status;
     }
-
-    /* Set timer period */
-    OsStatus = OS_TimerSet(SCH_LAB_Global.TimerId, 1000000, TimerPeriod);
-    if (OsStatus != OS_SUCCESS)
+    
+    Status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(0x1804), SCH_LAB_Global.CmdPipe);
+    if (Status != CFE_SUCCESS)
     {
-        CFE_ES_WriteToSysLog("%s: OS_TimerSet failed:RC=%ld\n", __func__, (long)OsStatus);
+        CFE_ES_WriteToSysLog("SCH_LAB: Error subscribing to command 0x1804, RC = 0x%08lX\n", (unsigned long)Status);
+        return Status;
+    }
+    
+    Status = CFE_SB_Subscribe(CFE_SB_ValueToMsgId(0x1805), SCH_LAB_Global.CmdPipe);
+    if (Status != CFE_SUCCESS)
+    {
+        CFE_ES_WriteToSysLog("SCH_LAB: Error subscribing to command 0x1805, RC = 0x%08lX\n", (unsigned long)Status);
+        return Status;
     }
 
     CFE_Config_GetVersionString(VersionString, SCH_LAB_CFG_MAX_VERSION_STR_LEN, "SCH Lab",
                           SCH_LAB_VERSION, SCH_LAB_BUILD_CODENAME, SCH_LAB_LAST_OFFICIAL);
 
-    OS_printf("SCH Lab Initialized.%s\n", VersionString);
+    OS_printf("SCH Lab Initialized to receive commands for 5 dummy tasks.%s\n", VersionString);
 
     return CFE_SUCCESS;
 }
